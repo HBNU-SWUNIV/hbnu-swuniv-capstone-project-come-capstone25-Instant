@@ -1,0 +1,77 @@
+# 한밭대학교 컴퓨터공학과 Instant팀
+
+**팀 구성**
+- 20227126 김만종
+- 20217142 양경찬
+
+## <u>Teamate</u> Project Background
+
+- ### 필요성
+
+  * 기존의 숨바꼭질(Hide and Seek) 장르와 소셜 디덕션(Social Deduction) 장르를 결합하여 플레이어 간의 심리전을 강조한 새로운 멀티플레이 경험 제공
+  * 단순한 물리적 숨기가 아닌, 플레이어를 모방하는 AI NPC들 사이에서 플레이어 Seeker로부터 자신의 '행동'을 숨겨야 하는 고도화된 게임플레이
+  * 연구용으로 사용되는 Unity ML-Agents를 활용하여 실제 플레이어처럼 행동하는 AI NPC를 구현하고, 실제 게임에 적용함으로써 활용 방법 제시
+
+- ### 기존 해결책의 문제점
+
+  * **기존 소셜 디덕션 게임:** 대부분 플레이어 간의 직접적인 상호작용(대화, 투표)에 의존하며, 게임 환경 내 AI가 탐지나 교란의 핵심 요소로 작용하는 경우가 드묾
+  * **기존 숨바꼭질 게임:** 주로 오브젝트 변신(Prop Hunt)이나 정적인 숨기에 초점을 맞춤. 본 프로젝트처럼 다수의 AI NPC 사이에서 '행동 패턴'을 위장하여 플레이어 Seeker를 속이는 방식의 게임은 부족함
+
+## System Design
+- ### System Architecture
+<img width="3798" height="6266" alt="Mermaid Chart - Create complex, visual diagrams with text -2025-10-29-143407" src="https://github.com/user-attachments/assets/559467ad-104b-494e-bbe6-4a505ae4f562" />
+
+- ### System Requirements
+
+  * **Unity Engine**: 6000.2.6f
+  * **Netcode for GameObjects**: 2.6.0
+  * **ML-Agents**: 2.0.1
+  * **Unity Services**: 1.1.8
+    * Authentication (인증), Multiplayer (세션 관리)
+  * **Unity Cinemachine**: 3.1.4
+    * 3인칭 궤도 카메라(Orbital Follow)
+  * **DOTween Pro** (Third-Party): 1.0.480
+    * UI 애니메이션 연출
+
+## Case Study
+
+- ### Description
+
+  * **소셜 디덕션 및 숨바꼭질 장르 융합:** 플레이어 Hider가 플레이어 Seeker를 피해 AI NPC들 사이에서 생존하는 PvP 규칙을 채택
+  * **AI NPC 행동 모방 (ML-Agents - 학습 방식 개선):**
+    * **초기 학습 방식:** 개발 초기에는 `HiderTrainAgent.cs`에게 Hider의 특정 행동(예: 점프, 스핀) 자체에 직접적인 보상을 부여하여 해당 행동을 유도하는 방식으로 학습을 시도함. 그러나 이 방식은 원하는 행동(NPC처럼 보이기)을 학습시키기 위한 보상 함수 설계가 복잡해지고, 학습 효율이 낮으며 결과적으로 생성된 모델의 성능(자연스러움, Seeker 회피 능력)이 만족스럽지 못했음
+    * **개선된 학습 방식 (AI Seeker 및 의심도 시스템 도입):** 학습 효율과 모델 성능을 높이기 위해 학습 환경(`HiderTrainAgent.cs`가 동작하는 환경) 내에 AI Seeker(`SeekerMover.cs`)를 도입함. 이 AI Seeker는 '의심도(Suspicion)' 시스템을 기반으로 Hider Agent의 눈에 띄는 행동(점프, 스핀 등)을 감지하고 추적함. 이에 따라 Hider Agent의 보상 함수를 단순화함
+        * Seeker에게 잡히지 않고 오래 생존하는 것에 긍정적 보상
+        * Seeker에게 잡혔을 때 큰 부정적 보상
+        * (추가 가능) 의심도를 특정 범위 내로 유지하는 것에 대한 보상 또는 범위를 벗어났을 때의 패널티를 부여함. 이 접근 방식은 Agent가 스스로 Seeker의 탐지를 피하기 위해 NPC처럼 '덜 의심스러운' 행동 패턴을 학습하도록 유도하여, 더 간단한 코드 구조로 더 효율적인 학습과 높은 성능의 행동 모델을 얻을 수 있었음
+  * **플레이어 역할 시스템 (Seeker/Hider):** `RoleManager.cs`가 게임 시작 시 무작위로 플레이어들에게 Seeker 또는 Hider 역할을 배정함
+    * `SeekerRole.cs`: 플레이어 Seeker는 더 빠른 이동 속도를 가지며, 공격(`TryInteract`)을 통해 다른 플레이어(`HittableBody`)에게 피해를 줄 수 있음
+    * `HiderRole.cs`: 플레이어 Hider는 맵 상의 오브젝트(`InteractableObject`)와 상호작용(예: 아이템 줍기)이 가능하며, NPC처럼 행동하여 Seeker의 눈을 속여야 함
+  * **Unity Netcode (NGO) 아키텍처:** 호스트-서버(Host-Server) 모델 기반. `ConnectionManager`가 Unity Multiplayer Service를 통해 세션을 관리하며, `GameManager`가 `NetworkList<PlayerData>`로 모든 플레이어의 역할과 상태를 동기화함. `PlayManager`는 게임 흐름(타이머, 역할 배정, 스폰)을 RPC와 `NetworkVariable`로 관리함
+  * **구형(Spherical) 월드 물리:** `PlanetGravity.cs`와 `PlanetBody.cs`를 통해 캐릭터들이 구형 행성 표면을 자연스럽게 이동하고 표면에 맞춰 정렬되도록 구현함
+  * **Hider 미션 시스템:** Hider 플레이어에게 생존 외 추가 목표(점프 횟수, 특정 아이템 줍기 등)를 부여하여 게임플레이에 다양성을 더함. 미션 성공 시 버프, 실패 시 디버프를 제공하여 위험과 보상을 동시에 제공함
+
+## Conclusion
+
+- ### 주요 성과
+  * **완전한 PvPvE 멀티플레이 게임 루프 구현:** Unity Services와 Netcode for Gameobjects를 활용하여 세션 관리, 로비, 역할 배정, 인게임 플레이(Hider 생존 및 미션 수행, Seeker 탐색 및 공격), 결과 처리까지 이어지는 완전한 멀티플레이 게임 사이클을 성공적으로 구현함
+  * **핵심 소셜 디덕션 메커니즘 구축:** 플레이어 Seeker가 플레이어 Hider를 다수의 AI NPC(`Npa.cs`) 사이에서 찾아내야 하는 핵심 게임플레이 메커니즘을 구현함. Hider는 NPC의 행동을 모방하여 자신의 정체를 숨겨야 함
+  * **이벤트 기반 시스템 아키텍처:** `GamePlayEventHandler`와 `MissionNotifier` 등 이벤트 버스를 사용하여 UI, 게임 로직, 미션 시스템 간의 결합도를 낮추고 유연한 구조를 설계함
+  * **확장 가능한 컨텐츠 구조:** 동물(`AnimalData`), 미션(`MissionData`), 상호작용 오브젝트(`InteractionData`) 등을 `ScriptableObject` 기반으로 설계하여, 코드 수정 없이 새로운 게임 요소를 쉽게 추가하고 관리할 수 있는 시스템을 구축함
+  * **인게임 이미지**
+    * <img width="600" alt="스크린샷 2025-10-29 234949" src="https://github.com/user-attachments/assets/95675f18-280f-41d4-84ca-e7e3c73f49c6" />
+    * <img width="600" alt="스크린샷 2025-10-29 234832" src="https://github.com/user-attachments/assets/676db210-c224-41b6-bfd0-9b8be31bdc28" />
+    * <img width="600" alt="스크린샷 2025-10-29 235015" src="https://github.com/user-attachments/assets/91fad58c-dc07-458c-ad6c-282f97bbfe5e" />
+    * <img width="600" alt="스크린샷 2025-10-29 235057" src="https://github.com/user-attachments/assets/628505dd-5b74-4d92-bd32-2caa21536413" />
+
+
+
+- ### 향후 발전 방향
+
+  * **Hider AI(NPC) 행동 고도화:** ML-Agents 학습(`HiderTrainAgent.cs`)을 통해 수집된 플레이어 행동 데이터를 기반으로, 현재의 `Npa.cs`보다 더 정교하고 플레이어와 구별하기 어려운 NPC 행동 모델을 생성 및 적용
+  * **전용 서버(Dedicated Server) 도입:** 현재 호스트-서버 모델의 안정성 한계를 극복하기 위해, Unity Game Server Hosting (Multiplay) 등을 활용한 전용 서버 아키텍처로 전환하여 더 안정적이고 확장 가능한 멀티플레이 환경 제공
+  * **컨텐츠 확장 및 밸런싱:** `AnimalData`에 정의된 다양한 동물 모델 구현, `MissionType` 기반의 새로운 Hider 미션 추가, Seeker와 Hider 간의 스킬 또는 능력 추가 등을 통해 게임플레이 깊이 확장 및 역할 간 밸런스 조정
+  
+## Project Outcome
+- **2025 대전 게임 브릿지 데이 인디(inD) 게임어스 분야 우수상 수상**
+- **2025 한밭대학교 컴퓨터공학과 캡스톤 디자인 전시회 장려상 수상**
